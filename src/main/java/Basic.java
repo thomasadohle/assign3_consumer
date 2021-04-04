@@ -23,6 +23,7 @@ public class Basic {
         DeliverCallback deliverCallback = (consumerTag, delivery) -> {
             try {
                 executorService.execute(new DbWriterRunnable(delivery.getBody()));
+                channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
             } catch (TimeoutException e) {
                 e.printStackTrace();
             }
