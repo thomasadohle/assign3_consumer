@@ -4,18 +4,30 @@ import models.Purchase;
 import worker.DbWriterRunnable;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeoutException;
 
 public class Basic {
-
+    private static final ConnectionFactory factory = new ConnectionFactory();
     private static final int numThreads = 8;
+    private static ExecutorService executorService = Executors.newFixedThreadPool(numThreads);
+
 
     public static void main(String[] args) throws IOException, TimeoutException {
-        for (int i=0; i<numThreads; i++){
-            DbWriterRunnable runnable = new DbWriterRunnable();
-            Thread t = new Thread (runnable);
-            t.start();
-        }
+        final Connection connection = factory.newConnection();
+        final Channel channel = connection.createChannel();
+        channel.exchangeDeclare("purchase", "fanout");
+        String queueName = channel.queueDeclare().getQueue();
+        channel.queueBind(queueName, "purchase", "");
+        DeliverCallback deliverCallback = (consumerTag, delivery) -> {
+            try {
+                executorService.execute(new DbWriterRunnable(delivery.getBody()));
+            } catch (TimeoutException e) {
+                e.printStackTrace();
+            }
+        };
+        channel.basicConsume(queueName, false, deliverCallback, consumerTag -> { });
     }
 
 }

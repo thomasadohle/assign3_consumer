@@ -6,27 +6,29 @@ import models.Purchase;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class PurchasePersistor {
     private Purchase purchase;
-    private boolean purchasePersisted = false;
-    private boolean purchaseItemsPersisted = false;
-    private int persistPurchaseAttempts = 0;
-    private int PersistPurchaseItemsAttempts = 0;
+    private AtomicBoolean purchasePersisted = new AtomicBoolean(false);
+    private AtomicBoolean purchaseItemsPersisted = new AtomicBoolean(false);
+    private AtomicInteger persistPurchaseAttempts = new AtomicInteger();
+    private AtomicInteger PersistPurchaseItemsAttempts = new AtomicInteger();
 
     public PurchasePersistor(Purchase p){
         this.purchase = p;
     }
 
-    public boolean persistPurchase(){
-        while (! this.purchasePersisted && this.persistPurchaseAttempts<5){
+    public synchronized boolean persistPurchase(){
+        while (! this.purchasePersisted.get() && this.persistPurchaseAttempts.get()<5){
             this.executePersistPurchase();
         }
         return true;
     }
 
     public boolean persistPurchaseItems(){
-        while (! this.purchaseItemsPersisted && this.PersistPurchaseItemsAttempts<5){
+        while (! this.purchaseItemsPersisted.get() && this.PersistPurchaseItemsAttempts.get()<5){
             this.executePersistPurchaseItems();
         }
         return true;
@@ -35,8 +37,8 @@ public class PurchasePersistor {
 
 
 
-    private void executePersistPurchase(){
-        this.persistPurchaseAttempts ++;
+    private synchronized void executePersistPurchase(){
+        this.persistPurchaseAttempts.incrementAndGet();
         int storeId = this.purchase.getStoreId();
         int customerId = purchase.getCustomerId();
         String purchaseQuery = "INSERT INTO purchase (store_id, customer_id, purchase_date) VALUES(?,?,?)";
@@ -45,15 +47,17 @@ public class PurchasePersistor {
             purchaseStatement.setInt(2, customerId);
             purchaseStatement.setString(3, purchase.getDate());
             boolean purchaseStored = purchaseStatement.execute();
-            this.purchasePersisted = true;
+            this.purchasePersisted.set(true);
         } catch (SQLException e) {
-            System.out.println("Failed to persist purchase " + this.purchase);
+            String msg = "Failed to persist on thread " + Thread.currentThread();
+            msg += "\n" + e.toString();
+            System.out.println(msg);
         }
 
     }
 
     private void executePersistPurchaseItems() {
-        this.PersistPurchaseItemsAttempts ++;
+        this.PersistPurchaseItemsAttempts.incrementAndGet();
         int storeId = this.purchase.getStoreId();
         int customerId = purchase.getCustomerId();
         String purchaseItemsQuery = "INSERT INTO purchase_item (item_id, num_items, store_id, customer_id) VALUES (?,?,?,?)";
@@ -66,9 +70,9 @@ public class PurchasePersistor {
                 purchaseItemsStatement.addBatch();
             }
             purchaseItemsStatement.executeBatch();
-            this.purchaseItemsPersisted = true;
+            this.purchaseItemsPersisted.set(true);
         } catch (Exception e){
-            System.out.println("Failed to persist PurcahseItems for Purchase " + this.purchase);
+            System.out.println("Failed to persist PurchaseItems for Purchase " + this.purchase);
         }
     }
 }

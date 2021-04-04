@@ -12,34 +12,21 @@ import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
 public class DbWriterRunnable implements Runnable{
-    private ConnectionFactory factory = new ConnectionFactory();
-    private final Connection connection = factory.newConnection();
-    private ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper();
+    private Purchase purchase;
+    private PurchasePersistor persistor;
 
-    public DbWriterRunnable() throws IOException, TimeoutException {
+    public DbWriterRunnable(byte[] message) throws IOException, TimeoutException {
+        this.purchase = mapper.readValue(message, Purchase.class);
     }
 
     @Override
     public void run(){
-        try{
-            System.out.println("Initializing thread " + Thread.currentThread());
-            final Channel channel = connection.createChannel();
-            channel.exchangeDeclare("purchase", "fanout");
-            String queueName = channel.queueDeclare().getQueue();
-            channel.queueBind(queueName, "purchase", "");
-            DeliverCallback deliverCallback = (consumerTag, delivery) -> {
-                Purchase purchase = mapper.readValue(delivery.getBody(), Purchase.class);
-                System.out.println("Thread " + Thread.currentThread() + " received " + purchase);
-                persistData(purchase);
-            };
-            channel.basicConsume(queueName, false, deliverCallback, consumerTag -> { });
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        persistData();
     }
 
-    private void persistData(Purchase p){
-        PurchasePersistor persistor = new PurchasePersistor(p);
+    private synchronized void persistData(){
+        this.persistor = new PurchasePersistor(this.purchase);
         persistor.persistPurchase();
         persistor.persistPurchaseItems();
     }
