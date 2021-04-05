@@ -10,7 +10,7 @@ import java.util.concurrent.TimeoutException;
 
 public class Basic {
     private static final ConnectionFactory factory = new ConnectionFactory();
-    private static final int numThreads = 8;
+    private static final int numThreads = 16;
     private static ExecutorService executorService = Executors.newFixedThreadPool(numThreads);
 
 
